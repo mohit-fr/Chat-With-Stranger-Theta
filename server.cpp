@@ -170,9 +170,9 @@ void ProcessNewMessage(SOCKET nClientSocket)
             } 
             else if(message == "/clear") 
             {
-                const char* clearCommand = "\033[2J\033[1;1H";
-                send(nClientSocket, (char*)&COLORS[11], sizeof(int), 0);
-                send(nClientSocket, clearCommand, strlen(clearCommand), 0);
+                string clearMsg = "Chat screen cleared.\n";
+                send(nClientSocket, (char*)&COLORS[10], sizeof(int), 0);
+                send(nClientSocket, clearMsg.c_str(), clearMsg.length(), 0);
             } 
             else if(message == "/time") 
             {

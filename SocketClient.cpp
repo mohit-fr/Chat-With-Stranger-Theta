@@ -109,6 +109,35 @@ void showOutput() {
                 }
             }
         }
+
+        if (strstr(buff, "/clear") != NULL) {
+            HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+            COORD coordScreen = {0, 0};
+            DWORD cCharsWritten;
+            CONSOLE_SCREEN_BUFFER_INFO csbi;
+            DWORD dwConSize;
+
+            // Get the number of character cells in the current buffer
+            GetConsoleScreenBufferInfo(hConsole, &csbi);
+            dwConSize = csbi.dwSize.X * csbi.dwSize.Y;
+
+            // Fill the entire screen with blanks
+            FillConsoleOutputCharacter(hConsole, ' ', dwConSize, coordScreen, &cCharsWritten);
+
+            // Get the current text attribute
+            GetConsoleScreenBufferInfo(hConsole, &csbi);
+
+            // Set the buffer's attributes accordingly
+            FillConsoleOutputAttribute(hConsole, csbi.wAttributes, dwConSize, coordScreen, &cCharsWritten);
+
+            // Put the cursor at its home coordinates
+            SetConsoleCursorPosition(hConsole, coordScreen);
+
+            // Now show the cleared message
+            SetConsoleTextAttribute(hConsole, 10); // Green
+            cout << "Chat screen cleared.\n";
+            resetColor();
+        }
     }
 }
 
