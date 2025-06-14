@@ -7,7 +7,7 @@ A real-time chat application built with C++ and socket programming. Connect with
 - Real-time multi-user chat
 - Colored messages for different users
 - User names and system notifications
-- Commands: /members, /clear, /time, /count, /help
+- Commands: /list, /clear, /time, /count, /help, /msg <Username>
 
 ## Build & Run
 
