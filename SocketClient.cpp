@@ -5,6 +5,7 @@
 #include <thread>
 #include <chrono>
 #include <atomic>
+#include <string>
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -14,6 +15,8 @@ atomic<bool> running(true);
 
 SOCKET nClientSocket;
 struct sockaddr_in srv;
+string userName;
+bool nameSet = false;
 
 // Function to set console text color
 void setColor(int color) {
@@ -47,6 +50,7 @@ void takeInput() {
             break;
         }
 
+        // Don't echo the input since the server will send it back
         int nRet = send(nClientSocket, buff, strlen(buff), 0);
         if (nRet == SOCKET_ERROR) {
             setColor(12); // Red color for error
@@ -59,30 +63,51 @@ void takeInput() {
 
 void showOutput() {
     while (running) {
-        char buff[256] = {0};
-        int nRet = recv(nClientSocket, buff, sizeof(buff) - 1, 0);
-        if (nRet > 0) {
-            if (strlen(buff) > 0) {
-                // Check if it's a system message
-                if (strstr(buff, "Waiting for a partner") || 
-                    strstr(buff, "connected to a random client") ||
-                    strstr(buff, "disconnected")) {
-                    setColor(14); // Yellow color for system messages
-                } else {
-                    setColor(10); // Green color for chat messages
-                }
-                cout << "Message From your friend : " << buff << "\n";
+        int color;
+        int nRet = recv(nClientSocket, (char*)&color, sizeof(int), 0);
+        if (nRet <= 0) {
+            if (nRet == 0) {
+                setColor(12); // Red color for disconnection
+                cout << "\nServer closed the connection.\n";
+                resetColor();
+            } else {
+                setColor(12); // Red color for error
+                cerr << "\nNo response from server (timed out).\n";
                 resetColor();
             }
-        } else if (nRet == 0) {
-            setColor(12); // Red color for disconnection
-            cout << "Server closed the connection.\n";
-            resetColor();
             break;
-        } else if (nRet == SOCKET_ERROR) {
-            setColor(12); // Red color for error
-            cerr << "No response from server (timed out).\n";
-            resetColor();
+        }
+
+        char buff[256] = {0};
+        nRet = recv(nClientSocket, buff, sizeof(buff) - 1, 0);
+        if (nRet > 0) {
+            if (strlen(buff) > 0) {
+                string message(buff);
+                
+                // Handle different types of messages with different colors
+                if (message.find("Please enter your name:") != string::npos) {
+                    setColor(11); // Cyan for prompts
+                    cout << message;
+                    resetColor();
+                }
+                else if (message.find("Welcome to Theta Chat!") != string::npos) {
+                    setColor(11); // Cyan for welcome message (same as socket created)
+                    cout << message << "\n\n";  // Add extra line gap
+                    resetColor();
+                }
+                else if (message.find(" has joined the chat!") != string::npos ||
+                         message.find(" has left the chat.") != string::npos) {
+                    setColor(14); // Yellow for system messages
+                    cout << message << "\n";
+                    resetColor();
+                }
+                else {
+                    // Regular chat message
+                    setColor(color); // Use received color for chat messages
+                    cout << message << "\n";
+                    resetColor();
+                }
+            }
         }
     }
 }
@@ -108,7 +133,7 @@ int main() {
         return 1;
     } else {
         setColor(11); // Cyan color for success
-        cout << "Socket created successfully.\n";
+        cout << "Socket created successfully.\n\n";  // Add line gap
         resetColor();
     }
 
@@ -128,33 +153,7 @@ int main() {
         return 1;
     } else {
         setColor(11); // Cyan color for success
-        cout << "Connected to server successfully.\n";
-        resetColor();
-        
-        char buff[256] = {0};
-        nRet = recv(nClientSocket, buff, sizeof(buff) - 1, 0);
-        if (nRet > 0) {
-            setColor(14); // Yellow color for system message
-            cout << "Message from server: " << buff << "\n";
-            resetColor();
-        } else if (nRet == 0) {
-            setColor(12); // Red color for disconnection
-            cout << "Server closed the connection.\n";
-            resetColor();
-            closesocket(nClientSocket);
-            WSACleanup();
-            return 0;
-        } else {
-            setColor(12); // Red color for error
-            cerr << "Failed to receive initial message from server.\n";
-            resetColor();
-            closesocket(nClientSocket);
-            WSACleanup();
-            return 1;
-        }
-
-        setColor(11); // Cyan color for instructions
-        cout << "You can start sending messages to the server. Type 'exit' to quit.\n";
+        cout << "Connected to server successfully.\n\n";  // Add line gap
         resetColor();
 
         thread inputThread(takeInput);

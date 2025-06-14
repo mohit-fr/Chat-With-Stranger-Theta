@@ -1,13 +1,14 @@
-# Anonymous Chat Application
+# Theta - Multi-User Chat Application
 
-A simple client-to-client communication application built using C++ and socket programming. It allows users to connect and chat anonymously with strangers. The chat is not stored anywhere, making it a secure and ephemeral conversation tool.
+A real-time multi-user chat application built using C++ and socket programming. It allows multiple users to connect and chat in a shared space with colored messages and user names.
 
 ## Features
 
-- Real-time anonymous chat
-- Automatic client pairing
+- Real-time multi-user chat
+- User names for message identification
+- Colored messages for different users
+- System notifications for user join/leave
 - No message storage (ephemeral chat)
-- Support for multiple concurrent users
 - Cross-platform support (Windows, Linux, macOS)
 
 ## Prerequisites
@@ -65,16 +66,19 @@ A simple client-to-client communication application built using C++ and socket p
 ## Usage
 
 1. Start the server first
-2. Start at least two client instances
-3. Clients will be automatically paired
-4. Type your messages and press Enter to send
-5. Type 'exit' to quit a client
+2. Start multiple client instances
+3. When a client connects, they will be prompted to enter their name
+4. After entering the name, they can start chatting
+5. Messages will be displayed with the sender's name
+6. Each user's messages will have a different color
+7. Type 'exit' to quit a client
 
 ## Configuration
 
 The following parameters can be modified in the source code:
 - `PORT`: The port number for the server (default: 9909)
 - Maximum number of concurrent clients (default: 5)
+- Message colors for different users
 
 ## Security
 

@@ -4,6 +4,10 @@
 #include <windows.h>
 #include <queue>
 #include <map>
+#include <vector>
+#include <string>
+#include <algorithm>  // Add this for std::find
+#include <ctime>
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -15,33 +19,126 @@ fd_set fr, fw, fe;
 int nMaxFd;
 SOCKET nSocket;
 
-queue<SOCKET> availableClients; // Queue to manage available clients
-map<SOCKET, SOCKET> clientPairs;   // Map to manage client pairs
+struct ClientInfo {
+    string name;
+    int color;
+};
+
+map<SOCKET, ClientInfo> clients;  // Map to store client information
+vector<SOCKET> activeClients;     // Vector to store all active clients
+
+// Available colors for messages
+const int COLORS[] = {9, 10, 11, 12, 13, 14};  // Blue, Green, Cyan, Red, Magenta, Yellow
+int currentColorIndex = 0;
+
+void broadcastMessage(const string& senderName, const string& message, SOCKET senderSocket, int color) {
+    // Send to all clients except sender
+    string formattedMessage = senderName + ": " + message;
+    for (SOCKET client : activeClients) {
+        if (client != senderSocket) {  // Don't send back to sender
+            // Send color first, then message
+            send(client, (char*)&color, sizeof(int), 0);
+            send(client, formattedMessage.c_str(), formattedMessage.length(), 0);
+        }
+    }
+}
 
 void ProcessNewMessage(SOCKET nClientSocket) {
-    cout << "\nProcessing the new message for client socket: " << nClientSocket << endl;
     char buff[256 + 1] = {0,};
     int nRet = recv(nClientSocket, buff, 256, 0);
 
     if (nRet < 0) {
         cout << "\nError occurred, closing connection for client: " << nClientSocket << endl;
-        closesocket(nClientSocket);
         
-        SOCKET pairedClient = clientPairs[nClientSocket];
-        clientPairs.erase(nClientSocket);
-        clientPairs.erase(pairedClient);
-
-        if (pairedClient != INVALID_SOCKET) {
-            send(pairedClient, "Your chat partner disconnected. Searching for a new partner...", 61, 0);
-            availableClients.push(pairedClient);
+        // Remove client from active clients
+        auto it = std::find(activeClients.begin(), activeClients.end(), nClientSocket);
+        if (it != activeClients.end()) {
+            activeClients.erase(it);
         }
-
+        
+        // Notify other clients who have entered their names
+        string disconnectMsg = clients[nClientSocket].name + " has left the chat.";
+        for (SOCKET client : activeClients) {
+            if (clients.find(client) != clients.end() && !clients[client].name.empty()) {
+                send(client, (char*)&COLORS[14], sizeof(int), 0);  // Yellow for system messages
+                send(client, disconnectMsg.c_str(), disconnectMsg.length(), 0);
+            }
+        }
+        
+        clients.erase(nClientSocket);
+        closesocket(nClientSocket);
     } else {
-        SOCKET pairedClient = clientPairs[nClientSocket];
-        if (pairedClient != INVALID_SOCKET) {
-            send(pairedClient, buff, sizeof(buff), 0);
+        string message(buff);
+        if (clients[nClientSocket].name.empty()) {
+            // First message is the name
+            clients[nClientSocket].name = message;
+            clients[nClientSocket].color = COLORS[currentColorIndex];
+            currentColorIndex = (currentColorIndex + 1) % (sizeof(COLORS) / sizeof(COLORS[0]));
+            
+            // Send welcome message to new client first
+            const char* welcome = "Welcome to Theta Chat! You can start chatting now.\n";
+            send(nClientSocket, (char*)&COLORS[10], sizeof(int), 0);  // Green for welcome
+            send(nClientSocket, welcome, strlen(welcome), 0);
+
+            // Then notify other clients who have already entered their names
+            string welcomeMsg = message + " has joined the chat!";
+            for (SOCKET client : activeClients) {
+                if (client != nClientSocket && clients.find(client) != clients.end() && !clients[client].name.empty()) {
+                    send(client, (char*)&COLORS[14], sizeof(int), 0);  // Yellow for system messages
+                    send(client, welcomeMsg.c_str(), welcomeMsg.length(), 0);
+                }
+            }
+        } else {
+            // Check for special commands
+            if (message == "/members" || message == "/list") {
+                string memberList = "\n<--- Online Members --->\n";
+                for (const auto& client : clients) {
+                    if (!client.second.name.empty()) {
+                        memberList += client.second.name + "\n";
+                    }
+                }
+                memberList += "<------------------->\n";
+                send(nClientSocket, (char*)&COLORS[11], sizeof(int), 0);  // Cyan for member list
+                send(nClientSocket, memberList.c_str(), memberList.length(), 0);
+            } else if (message == "/features" || message == "/help") {
+                string featuresList = "\n<--- Available Commands --->\n";
+                featuresList += "/members or /list - Show all online members\n";
+                featuresList += "/clear - Clear your chat screen\n";
+                featuresList += "/time - Show current server time\n";
+                featuresList += "/count - Show total number of online users\n";
+                featuresList += "/help or /features - Show this help message\n";
+                featuresList += "<------------------------>\n";
+                send(nClientSocket, (char*)&COLORS[10], sizeof(int), 0);  // Green for help
+                send(nClientSocket, featuresList.c_str(), featuresList.length(), 0);
+            } else if (message == "/clear") {
+                const char* clearCommand = "\033[2J\033[1;1H";  // ANSI escape sequence to clear screen
+                send(nClientSocket, (char*)&COLORS[11], sizeof(int), 0);  // Cyan for system message
+                send(nClientSocket, clearCommand, strlen(clearCommand), 0);
+            } else if (message == "/time") {
+                time_t now = time(0);
+                char* dt = ctime(&now);
+                string timeMsg = "\nCurrent server time: " + string(dt);
+                send(nClientSocket, (char*)&COLORS[13], sizeof(int), 0);  // Magenta for time
+                send(nClientSocket, timeMsg.c_str(), timeMsg.length(), 0);
+            } else if (message == "/count") {
+                int count = 0;
+                for (const auto& client : clients) {
+                    if (!client.second.name.empty()) count++;
+                }
+                string countMsg = "\nTotal online users: " + to_string(count) + "\n";
+                send(nClientSocket, (char*)&COLORS[12], sizeof(int), 0);  // Red for count
+                send(nClientSocket, countMsg.c_str(), countMsg.length(), 0);
+            } else {
+                // Regular chat message
+                string formattedMessage = clients[nClientSocket].name + ": " + message;
+                for (SOCKET client : activeClients) {
+                    if (client != nClientSocket && clients.find(client) != clients.end() && !clients[client].name.empty()) {
+                        send(client, (char*)&clients[nClientSocket].color, sizeof(int), 0);
+                        send(client, formattedMessage.c_str(), formattedMessage.length(), 0);
+                    }
+                }
+            }
         }
-        cout << "\n******************************************************************\n";
     }
 }
 
@@ -52,19 +149,10 @@ void ProcessTheNewRequest() {
         SOCKET nClientSocket = accept(nSocket, (struct sockaddr *)&clientAddr, &nLen);
 
         if (nClientSocket != INVALID_SOCKET) {
-            if (availableClients.empty()) {
-                availableClients.push(nClientSocket);
-                send(nClientSocket, "Waiting for a partner...", 26, 0);
-            } else {
-                SOCKET pairedClient = availableClients.front();
-                availableClients.pop();
-
-                clientPairs[nClientSocket] = pairedClient;
-                clientPairs[pairedClient] = nClientSocket;
-
-                send(nClientSocket, "You are now connected to a random client", 41, 0);
-                send(pairedClient, "You are now connected to a random client", 41, 0);
-            }
+            activeClients.push_back(nClientSocket);
+            const char* prompt = "Please enter your name: ";
+            send(nClientSocket, (char*)&COLORS[11], sizeof(int), 0);  // Cyan for prompt
+            send(nClientSocket, prompt, strlen(prompt), 0);
 
             if (nClientSocket > nMaxFd) {
                 nMaxFd = nClientSocket;
@@ -73,8 +161,7 @@ void ProcessTheNewRequest() {
             cout << "\nError accepting connection\n";
         }
     } else {
-        for (auto it = clientPairs.begin(); it != clientPairs.end(); ++it) {
-            SOCKET clientSocket = it->first;
+        for (SOCKET clientSocket : activeClients) {
             if (FD_ISSET(clientSocket, &fr)) {
                 ProcessNewMessage(clientSocket);
             }
@@ -152,12 +239,9 @@ int main() {
         FD_SET(nSocket, &fr);
         FD_SET(nSocket, &fe);
 
-        for (auto it = clientPairs.begin(); it != clientPairs.end(); ++it) {
-            SOCKET clientSocket = it->first;
-            if (clientSocket != INVALID_SOCKET) {
-                FD_SET(clientSocket, &fr);
-                FD_SET(clientSocket, &fe);
-            }
+        for (SOCKET clientSocket : activeClients) {
+            FD_SET(clientSocket, &fr);
+            FD_SET(clientSocket, &fe);
         }
 
         nRet = select(nMaxFd + 1, &fr, &fw, &fe, &tv);
