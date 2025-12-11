@@ -196,3 +196,9 @@ int main() {
     WSACleanup();
     return 0;
 }
+
+
+// g++ -o server.exe server.cpp -lws2_32
+// g++ -o client.exe SocketClient.cpp -lws2_32
+// .\server.exe
+// .\client.exe
